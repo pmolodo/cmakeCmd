@@ -30,12 +30,9 @@ CWD_NAME = os.path.basename(CWD)
 
 THIS_PATH = os.path.normcase(os.path.normpath(os.path.realpath(os.path.abspath(sys.argv[0]))))
 THIS_DIR = os.path.dirname(THIS_PATH)
-PROJECT_SRC_DIR = THIS_DIR
-PROJECT_DIR = os.path.dirname(THIS_DIR)
-PROJECT_NAME = os.path.basename(PROJECT_DIR)
 
 def arg_parser():
-    parser = argparse.ArgumentParser(description='execute the cmake command for %s' % PROJECT_NAME,
+    parser = argparse.ArgumentParser(description='execute the cmake command for this project',
         epilog='If neither the release or debug flags are given, then the build '
             'type will be set to debug if the path contains the string "debug" '
             'anywhere in it, otherwise it will be set to release')
@@ -49,6 +46,10 @@ def arg_parser():
         'project file instead of the normal Makefile')
     parser.add_argument('--clean', action='store_true', help='Wipe the current '
         'directory clean of cmake files before building')
+    parser.add_argument('--sourceDir', help='The source directory for the project '
+        '(the directory which holds the top-level CMakeLists.txt) - defaults to the'
+        'directory where this cmakeCmd file resides (%(default)s)', default=THIS_DIR)
+    
     return parser
 
 def main(args=None):
@@ -61,11 +62,12 @@ def main(args=None):
         buildType = {'release':'release',
                      'debug':'debug',
                      'releasedbg':'releaseDbg'}.get(CWD_NAME.lower(), 'debug')
-    run_cmake(buildType=buildType, eclipse=parsed.eclipse, clean=parsed.clean)
+    run_cmake(buildType=buildType, eclipse=parsed.eclipse, clean=parsed.clean,
+            sourceDir=parsed.sourceDir)
 
 CMAKE_FILES_TO_CLEAN_RE = re.compile(r'''(^(CMake(?!Lists.txt$)|Makefile).*)|(.*cmake$)''')
 
-def run_cmake(buildType='release', eclipse=False, clean=False):
+def run_cmake(buildType='release', eclipse=False, clean=False, sourceDir=THIS_DIR):
     if buildType.lower() == 'release':
         buildType = 'Release'
     elif buildType.lower() == 'releasedbg':
@@ -93,7 +95,7 @@ def run_cmake(buildType='release', eclipse=False, clean=False):
                 print "error deleting %s:" % fullPath
                 traceback.print_exc()
     
-    args = ['cmake', PROJECT_SRC_DIR, '-DCMAKE_BUILD_TYPE=%s' % buildType]
+    args = ['cmake', sourceDir, '-DCMAKE_BUILD_TYPE=%s' % buildType]
     msg = ''
     if eclipse:
         args.append('-GEclipse CDT4 - Unix Makefiles')
