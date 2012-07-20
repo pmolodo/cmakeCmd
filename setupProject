@@ -1,0 +1,88 @@
+#!/usr/bin/env python
+
+import argparse
+import os
+import sys
+import subprocess
+import platform
+import stat
+
+from subprocess import check_call
+
+SOURCES_DIR = 'sources'
+BUILD_DIR = 'build'
+CMAKE_CMD = 'cmakeCmd'
+
+THIS_PATH = os.path.normcase(os.path.normpath(os.path.realpath(os.path.abspath(sys.argv[0]))))
+THIS_DIR = os.path.dirname(THIS_PATH)
+
+def arg_parser():	
+    parser = argparse.ArgumentParser(description="Set up a cmake project")
+    parser.add_argument('name', help='Name for the new project')
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument('--git', help='Clone the project from the given git repo')
+    group.add_argument('--hg', help='Clone the project from the given mercurial repo')
+    return parser
+
+def main(args=None):
+    if args is None:
+        args = sys.argv[1:]
+    parsed = arg_parser().parse_args(args)
+    if parsed.git:
+        repoSource = parsed.git
+        repoType = 'git'
+    elif parsed.hg:
+        repoSource = parsed.hg
+        repoType = 'hg'
+    else:
+        repoSource = None
+        repoType = None
+    setupProject(parsed.name, repoSource=repoSource, repoType=repoType)
+
+def setupProject(name, repoSource=None, repoType=None):
+    
+    # make the root project dir
+    os.mkdir(name)
+    os.chdir(name)
+    rootDir = os.getcwd()
+
+    # create the base cmakeCmd
+    with open(CMAKE_CMD, 'w') as cmakeCmdFile:
+        cmakeCmdFile.write(
+'''#!/bin/bash
+
+%s --sourceDir %s "$@"
+''' % (os.path.join(THIS_DIR, CMAKE_CMD), os.path.join(rootDir, SOURCES_DIR)))
+    # make cmakeCmd executable
+    os.chmod(CMAKE_CMD, os.stat(CMAKE_CMD).st_mode | stat.S_IXGRP | stat.S_IXOTH | stat.S_IXUSR)
+
+    # make the sources dir
+    if repoSource:
+        if repoType == 'git':
+            check_call(['git', 'clone', repoSource, SOURCES_DIR])
+        elif repoType == 'hg':
+            check_call(['hg', 'clone', repoSource, SOURCES_DIR])
+        else:
+            raise ValueError("Unrecognized repoType: %r" % repoType)
+    else:
+        os.mkdir(SOURCES_DIR)
+        with open(os.join(rootDir, 'CMakeLists.txt'), 'w') as listsFile:
+            listsFile.write('#Put CMakeLists content in here!')
+
+    # make the build dirs
+    for relType in ('debug', 'release'):
+        thisBuildDir = os.path.join(BUILD_DIR, osArch(), relType)
+        os.makedirs(thisBuildDir)
+        os.symlink(os.path.join(rootDir, CMAKE_CMD),
+            os.path.join(thisBuildDir, CMAKE_CMD))
+        
+
+def osArch():
+    val = os.environ.get('OS_ARCH')
+    if val:
+        return val
+    uname = platform.uname()
+    return '%s-%s' % (uname[0], uname[4])
+
+if __name__ == '__main__':
+    main()
